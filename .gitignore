@@ -1,0 +1,7 @@
+
+#builds
+binInt/
+
+#visual studio
+**.user
+.vs/
