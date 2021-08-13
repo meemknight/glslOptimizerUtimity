@@ -1,62 +1,90 @@
 #include <Windows.h>
 #include <iostream>
 #include "glsl_optimizer.h"
-
-
-const char* shader =
-R"(
-#version 150 core
-out vec4 FragColor;
-in vec3 v_localPos;
-//https://learnopengl.com/PBR/IBL/Diffuse-irradiance
-
-uniform sampler2D u_equirectangularMap;
-
-const vec2 invAtan = vec2(0.1591, 0.3183);
-vec2 SampleSphericalMap(vec3 v)
-{
-	vec2 uv = vec2(atan(v.z, v.x), asin(v.y));
-	uv *= invAtan;
-	uv += 0.5;
-	return uv;
-}
-
-void main()
-{		
-	vec2 uv = SampleSphericalMap(normalize(v_localPos)); // make sure to normalize localPos
-	vec3 color = texture(u_equirectangularMap, uv).rgb;
-	
-	FragColor = vec4(color, 1.0);
-}
-)";
+#include <fstream>
 
 void finish()
 {
-	system("pause");
+	//system("pause");
 	exit(0);
 }
 
-
-int main()
+bool endsWith(std::string const& value, std::string const& ending)
 {
-	auto ctx = glslopt_initialize(kGlslTargetOpenGL);
+	if (ending.size() > value.size()) return false;
+	return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
 
-	auto rezult = glslopt_optimize(ctx, glslopt_shader_type::kGlslOptShaderFragment,
-		shader, 0);
+void addOptimized(std::string& s) 
+{
+	auto pos = std::find(s.rbegin(), s.rend(), '.');
+	auto iter = pos.base();
 
-	if (glslopt_get_status(rezult))
+	s = std::string(s.begin(), iter-1) + "_optimized" + std::string(iter-1, s.end());
+
+};
+
+int WINAPI WinMain(HINSTANCE ,
+	HINSTANCE ,
+	PSTR pCmdLine, 
+	int )
+{
+
+	std::string fileName = pCmdLine;
+	glslopt_shader_type shaderType = {};
+
+	if (
+		endsWith(fileName, ".frag")
+		|| endsWith(fileName, ".fragment")
+		)
 	{
-		auto newSource = glslopt_get_output(rezult);
-		std::cout << "newSource:\n\n" << newSource << "\n";
+		shaderType = glslopt_shader_type::kGlslOptShaderFragment;
+	}
+	else if (
+		endsWith(fileName, ".vert")
+		|| endsWith(fileName, ".vertex")
+		)
+	{
+		shaderType = glslopt_shader_type::kGlslOptShaderVertex;
 	}
 	else
 	{
-		auto errLog = glslopt_get_log(rezult);
-		std::cout << "err:\n" << errLog << "\n";
 		finish();
 	}
 
 
+	std::ifstream inFile(pCmdLine);
+	if (!inFile.is_open())
+	{
+		finish();
+	}
+
+	std::string shaderSource((std::istreambuf_iterator<char>(inFile)),
+		std::istreambuf_iterator<char>());
+
+	inFile.close();
+
+	auto ctx = glslopt_initialize(kGlslTargetOpenGL);
+
+	auto rezult = glslopt_optimize(ctx, shaderType,
+		shaderSource.c_str(), 0);
+
+	addOptimized(fileName);
+	std::ofstream ofFile(fileName);
+
+	if (glslopt_get_status(rezult))
+	{
+		auto newSource = glslopt_get_output(rezult);
+		ofFile << newSource;
+	}
+	else
+	{
+		//auto errLog = glslopt_get_log(rezult);
+		//std::cout << "err:\n" << errLog << "\n";
+		ofFile << shaderSource;
+	}
+
+	ofFile.close();
 
 
 	finish();
